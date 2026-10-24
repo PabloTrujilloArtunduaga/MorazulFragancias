@@ -6,10 +6,22 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env'), quiet
 const enPruebas = process.env.NODE_ENV === 'test';
 
 // Las pruebas nunca tocan la base real: usan siempre una base aparte.
+// Las pruebas utilizan exclusivamente PostgreSQL local.
 if (enPruebas) {
-  process.env.DB_NAME = process.env.DB_NAME_TEST || 'morazul_test';
-  process.env.JWT_SECRET = process.env.JWT_SECRET_TEST || 'secreto-solo-para-pruebas-0123456789-abcdefghij';
+  process.env.DB_HOST = '127.0.0.1';
+  process.env.DB_PORT = '5432';
+  process.env.DB_NAME = 'morazul_test';
+  process.env.DB_USER = 'morazul_test_user';
+  process.env.DB_SSL = 'false';
+
+  // Usar exclusivamente la contraseña de la base local de pruebas.
+  process.env.DB_PASSWORD = process.env.DB_PASSWORD_TEST || '';
+
+  process.env.JWT_SECRET =
+    process.env.JWT_SECRET_TEST ||
+    'secreto-solo-para-pruebas-0123456789-abcdefghij';
 }
+
 
 const entero = (valor, porDefecto) => {
   const n = Number.parseInt(valor, 10);
