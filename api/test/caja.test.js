@@ -121,13 +121,39 @@ test('si quedó una caja abierta de un día anterior, hay que cerrarla antes de 
   const estado = await api.get('/api/caja/hoy');
   assert.equal(estado.body.caja, null);
   assert.match(estado.body.caja_pendiente_de_cerrar, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(estado.body.caja_pendiente);
+  assert.equal(estado.body.caja_pendiente.saldo_esperado, 1000);
+
+  // Intentar abrir sin cerrar la anterior debe fallar con 409
   const r = await api.post('/api/caja/abrir').send({ saldo_apertura: 0 });
   assert.equal(r.status, 409);
   assert.match(r.body.error.mensaje, /Cierra primero/);
+
+  // Cerrar la caja pendiente con el efectivo contado
+  const cierre = await api.post('/api/caja/pendiente/cerrar').send({ saldo_cierre: 1000 });
+  assert.equal(cierre.status, 200);
+  assert.equal(cierre.body.caja.estado, 'cerrada');
+  assert.equal(cierre.body.diferencia, 0);
+
+  // Ahora el estado de hoy no tiene cajas pendientes
+  const estadoLimpio = await api.get('/api/caja/hoy');
+  assert.equal(estadoLimpio.body.caja_pendiente_de_cerrar, null);
+  assert.equal(estadoLimpio.body.caja_pendiente, null);
+
+  // Ahora sí se puede abrir la caja de hoy
+  const apertura = await api.post('/api/caja/abrir').send({ saldo_apertura: 1000 });
+  assert.equal(apertura.status, 201);
+  assert.equal(apertura.body.caja.estado, 'abierta');
 });
 
 test('todas las rutas de caja exigen sesión', async () => {
-  for (const [metodo, ruta] of [['get', '/api/caja/hoy'], ['post', '/api/caja/abrir'], ['post', '/api/caja/hoy/cerrar'], ['get', '/api/caja']]) {
+  for (const [metodo, ruta] of [
+    ['get', '/api/caja/hoy'],
+    ['post', '/api/caja/abrir'],
+    ['post', '/api/caja/hoy/cerrar'],
+    ['post', '/api/caja/pendiente/cerrar'],
+    ['get', '/api/caja'],
+  ]) {
     assert.equal((await request(ctx.app)[metodo](ruta)).status, 401, ruta);
   }
 });

@@ -43,6 +43,10 @@ export default function Inicio() {
   if (cajaHoy?.estado === 'abierta') detalleCaja = `Caja abierta desde las ${horaCorta(cajaHoy.abierta_en)}`;
   if (cajaHoy?.estado === 'cerrada') detalleCaja = `Caja cerrada a las ${horaCorta(cajaHoy.cerrada_en)}`;
 
+  const saldoCajaMostrar = cajaHoy
+    ? pesos(cajaHoy.estado === 'cerrada' ? cajaHoy.saldo_cierre : cajaHoy.saldo_esperado)
+    : '—';
+
   return (
     <div className="pagina">
       <div className="pagina__cabecera">
@@ -61,7 +65,11 @@ export default function Inicio() {
           valor={pesos(ventas.datos.suma_total)}
           detalle={`${numero(ventas.datos.total)} ${plural(ventas.datos.total, 'venta registrada', 'ventas registradas')}`}
         />
-        <Indicador titulo="Saldo de caja" valor={cajaHoy ? pesos(cajaHoy.saldo_esperado) : '—'} detalle={detalleCaja} />
+        <Indicador
+          titulo={cajaHoy?.estado === 'cerrada' ? 'Saldo al cierre' : 'Saldo de caja'}
+          valor={saldoCajaMostrar}
+          detalle={detalleCaja}
+        />
         <Indicador
           titulo="Stock crítico"
           valor={numero(r.alertas_activas)}

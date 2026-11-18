@@ -75,4 +75,15 @@ async function pendienteDeCerrar(hoy, transaccion) {
   return fila ? fila.fecha : null;
 }
 
-module.exports = { fechaHoy, buscarHoy, resumen, movimientos, saldoSugerido, pendienteDeCerrar, serializar, num };
+// Caja más antigua que quedó abierta antes de hoy (para cerrarla si quedó pendiente).
+async function buscarPendiente(hoy, transaccion, modo = 'ninguno') {
+  const cierre = { ninguno: '', exclusivo: ' FOR UPDATE' }[modo];
+  const [caja] = await sequelize.query(
+    `SELECT id_caja, estado, to_char(fecha, 'YYYY-MM-DD') AS fecha FROM caja_diaria WHERE estado = 'abierta' AND fecha < :hoy ORDER BY fecha LIMIT 1${cierre}`,
+    { replacements: { hoy }, type: QueryTypes.SELECT, transaction: transaccion }
+  );
+  return caja || null;
+}
+
+module.exports = { fechaHoy, buscarHoy, buscarPendiente, resumen, movimientos, saldoSugerido, pendienteDeCerrar, serializar, num };
+

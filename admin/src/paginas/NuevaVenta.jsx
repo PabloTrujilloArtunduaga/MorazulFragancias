@@ -119,19 +119,25 @@ export default function NuevaVenta({ soloCarrito = false }) {
   if (soloCarrito && !movil) return <Navigate to="/vender" replace />;
 
   const cajaAbierta = caja.datos?.caja?.estado === 'abierta';
-  const avisoCaja = caja.datos && !cajaAbierta ? (caja.datos.caja ? 'La caja de hoy está cerrada: no se pueden registrar ventas.' : 'Abre la caja del día antes de registrar ventas.') : null;
+  const cajaCerrada = caja.datos?.caja?.estado === 'cerrada';
   const productos = lista.datos?.productos ?? [];
 
   return (
     <div className="pagina">
       <h1 className="solo-lectores">{soloCarrito ? 'Venta actual' : 'Nueva venta'}</h1>
 
-      {avisoCaja && (
+      {caja.datos && !cajaAbierta && (
         <Mensaje tipo="aviso">
-          {avisoCaja}{' '}
-          <Link to="/caja" className="cuerpo-fuerte" style={{ textDecoration: 'underline' }}>
-            Ir a la caja
-          </Link>
+          {cajaCerrada ? (
+            'La caja de hoy ya fue cerrada: no se pueden registrar más ventas hoy. Podrás vender mañana cuando se abra la nueva caja.'
+          ) : (
+            <>
+              Abre la caja del día antes de registrar ventas.{' '}
+              <Link to="/caja" className="cuerpo-fuerte" style={{ textDecoration: 'underline' }}>
+                Ir a la caja
+              </Link>
+            </>
+          )}
         </Mensaje>
       )}
 

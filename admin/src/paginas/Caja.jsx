@@ -120,7 +120,7 @@ function textoDiferencia(dif) {
   return dif > 0 ? `Sobran ${pesos(dif)}` : `Faltan ${pesos(Math.abs(dif))}`;
 }
 
-function VentanaCierre({ caja, onCerrar, onCerrada }) {
+function VentanaCierre({ caja, esPendiente = false, onCerrar, onCerrada }) {
   const avisos = useAvisos();
   const [contado, setContado] = useState('');
   const [error, setError] = useState('');
@@ -133,8 +133,9 @@ function VentanaCierre({ caja, onCerrar, onCerrada }) {
     if (contado === '') return setError('Escribe el efectivo que contaste en la caja.');
     setEnviando(true);
     try {
-      const r = await api('/api/caja/hoy/cerrar', { metodo: 'POST', cuerpo: { saldo_cierre: Number(contado) } });
-      avisos.mostrar(`Caja cerrada. ${textoDiferencia(r.diferencia)}.`);
+      const ruta = esPendiente ? '/api/caja/pendiente/cerrar' : '/api/caja/hoy/cerrar';
+      const r = await api(ruta, { metodo: 'POST', cuerpo: { saldo_cierre: Number(contado) } });
+      avisos.mostrar(`Caja ${esPendiente ? `del ${fechaCompleta(caja.fecha)} ` : ''}cerrada. ${textoDiferencia(r.diferencia)}.`);
       onCerrada();
       onCerrar();
     } catch (err) {
@@ -144,20 +145,24 @@ function VentanaCierre({ caja, onCerrar, onCerrada }) {
   }
 
   return (
-    <Ventana titulo="Cerrar caja" onCerrar={onCerrar}>
+    <Ventana titulo={esPendiente ? `Cerrar caja del ${fechaCompleta(caja.fecha)}` : 'Cerrar caja'} onCerrar={onCerrar}>
       <form onSubmit={cerrar} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <p className="tenue">
           Según el sistema debería haber <strong className="cuerpo-fuerte" style={{ color: 'var(--ink-900)' }}>{pesos(caja.saldo_esperado)}</strong> en la caja (apertura más ingresos menos egresos). Cuenta el efectivo y escríbelo:
         </p>
         <Campo etiqueta="Efectivo contado" inputMode="numeric" autoComplete="off" placeholder="0" value={contado} onChange={(e) => setContado(soloDigitos(e.target.value))} ayuda={diferencia === null ? undefined : textoDiferencia(diferencia)} />
-        <Mensaje tipo="aviso">Al cerrar la caja ya no se pueden registrar ventas ni movimientos hoy, y no se puede reabrir.</Mensaje>
+        <Mensaje tipo="aviso">
+          {esPendiente
+            ? 'Al cerrar esta caja pendiente podrás abrir la caja de hoy y continuar con la operación normal.'
+            : 'Al cerrar la caja ya no se pueden registrar ventas ni movimientos hoy, y no se puede reabrir.'}
+        </Mensaje>
         <Mensaje>{error}</Mensaje>
         <div style={{ display: 'flex', gap: 12 }}>
           <Boton variante="secundario" onClick={onCerrar}>
             Cancelar
           </Boton>
           <Boton type="submit" style={{ flex: 1 }} disabled={enviando}>
-            {enviando ? 'Cerrando…' : 'Cerrar caja'}
+            {enviando ? 'Cerrando…' : esPendiente ? 'Cerrar caja pendiente' : 'Cerrar caja'}
           </Boton>
         </div>
       </form>
@@ -212,18 +217,34 @@ export default function Caja() {
         {abierta && (
           <div className="pagina__acciones">
             <Boton variante="secundario" onClick={() => setVentana('movimiento')}>
-              Registrar egreso
+              Registrar movimiento
             </Boton>
             <Boton onClick={() => setVentana('cierre')}>Cerrar caja</Boton>
           </div>
         )}
       </div>
 
-      {d.caja_pendiente_de_cerrar && (
-        <Mensaje tipo="aviso">La caja del {fechaCompleta(d.caja_pendiente_de_cerrar)} quedó abierta. Hay que cerrarla antes de abrir la de hoy.</Mensaje>
+      {!abierta && caja && (
+        <Mensaje tipo="aviso">
+          La caja de hoy ya fue cerrada a las {horaCorta(caja.cerrada_en)}. Por regla del negocio, el registro de ventas y movimientos está cerrado por hoy y se reanudará mañana al abrir una nueva caja.
+        </Mensaje>
       )}
 
-      {!caja ? (
+      {d.caja_pendiente ? (
+        <div className="tarjeta apertura" style={{ borderLeft: '4px solid var(--aviso-borde, #d97706)' }}>
+          <h2 className="titulo-m">Caja anterior pendiente de cierre</h2>
+          <p className="tenue">
+            La caja del <strong>{fechaCompleta(d.caja_pendiente.fecha)}</strong> quedó abierta con un saldo esperado de{' '}
+            <strong className="cuerpo-fuerte">{pesos(d.caja_pendiente.saldo_esperado)}</strong>.
+            Debes cerrarla con el efectivo contado antes de poder abrir la caja de hoy.
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <Boton onClick={() => setVentana('cierre-pendiente')}>
+              Cerrar caja del {fechaCompleta(d.caja_pendiente.fecha)}
+            </Boton>
+          </div>
+        </div>
+      ) : !caja ? (
         <AbrirCaja sugerido={d.saldo_apertura_sugerido} onAbierta={estado.recargar} />
       ) : (
         <>
@@ -330,6 +351,17 @@ export default function Caja() {
       {ventana === 'cierre' && caja && (
         <VentanaCierre
           caja={caja}
+          onCerrar={() => setVentana(null)}
+          onCerrada={() => {
+            estado.recargar();
+            anteriores.recargar();
+          }}
+        />
+      )}
+      {ventana === 'cierre-pendiente' && d.caja_pendiente && (
+        <VentanaCierre
+          caja={d.caja_pendiente}
+          esPendiente
           onCerrar={() => setVentana(null)}
           onCerrada={() => {
             estado.recargar();

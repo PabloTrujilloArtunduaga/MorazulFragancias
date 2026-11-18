@@ -10,17 +10,26 @@ const router = express.Router();
 
 router.get('/hoy', async (_req, res) => {
   const { hoy, caja } = await servicio.buscarHoy();
-  const pendiente = await servicio.pendienteDeCerrar(hoy);
+  const pendiente = await servicio.buscarPendiente(hoy);
   const sugerido = await servicio.saldoSugerido();
+  const resumenPendiente = pendiente ? await servicio.resumen(pendiente.id_caja) : null;
   if (!caja) {
-    return res.json({ fecha: hoy, caja: null, movimientos: [], saldo_apertura_sugerido: sugerido, caja_pendiente_de_cerrar: pendiente });
+    return res.json({
+      fecha: hoy,
+      caja: null,
+      movimientos: [],
+      saldo_apertura_sugerido: sugerido,
+      caja_pendiente_de_cerrar: pendiente ? pendiente.fecha : null,
+      caja_pendiente: resumenPendiente,
+    });
   }
   res.json({
     fecha: hoy,
     caja: await servicio.resumen(caja.id_caja),
     movimientos: await servicio.movimientos(caja.id_caja),
     saldo_apertura_sugerido: sugerido,
-    caja_pendiente_de_cerrar: pendiente,
+    caja_pendiente_de_cerrar: pendiente ? pendiente.fecha : null,
+    caja_pendiente: resumenPendiente,
   });
 });
 
@@ -80,6 +89,26 @@ router.post('/hoy/cerrar', async (req, res) => {
     const { caja } = await servicio.buscarHoy(t, 'exclusivo');
     if (!caja) throw reglaDeNegocio('No hay caja abierta hoy');
     if (caja.estado !== 'abierta') throw conflicto('La caja de hoy ya está cerrada');
+
+    const { saldo_esperado: esperado } = await servicio.resumen(caja.id_caja, t);
+    await CajaDiaria.update({ estado: 'cerrada', saldo_cierre: contado, cerrada_en: new Date() }, { where: { id_caja: caja.id_caja }, transaction: t });
+    const dif = Math.round((contado - esperado) * 100) / 100;
+    await auditar(t, req.usuario.id, 'caja', caja.id_caja, 'editar', { cambio: 'cerrar', saldo_esperado: esperado, saldo_cierre: contado, diferencia: dif });
+    return { idCaja: caja.id_caja, diferencia: dif };
+  });
+  res.json({ caja: await servicio.resumen(idCaja), diferencia });
+});
+
+// Cierre de una caja anterior que quedó pendiente de cerrar.
+router.post('/pendiente/cerrar', async (req, res) => {
+  const b = cuerpo(req);
+  const contado = dinero(b.saldo_cierre, 'El efectivo contado');
+
+  const { idCaja, diferencia } = await sequelize.transaction(async (t) => {
+    const hoy = await servicio.fechaHoy(t);
+    const caja = await servicio.buscarPendiente(hoy, t, 'exclusivo');
+    if (!caja) throw reglaDeNegocio('No hay ninguna caja pendiente de cerrar anterior a hoy');
+    if (caja.estado !== 'abierta') throw conflicto('La caja ya está cerrada');
 
     const { saldo_esperado: esperado } = await servicio.resumen(caja.id_caja, t);
     await CajaDiaria.update({ estado: 'cerrada', saldo_cierre: contado, cerrada_en: new Date() }, { where: { id_caja: caja.id_caja }, transaction: t });

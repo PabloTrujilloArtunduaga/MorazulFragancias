@@ -25,3 +25,5 @@ docs/
 
 # Archivos subidos por la API (fotos de fragancias)
 api/uploads/
+.vercel
+.env*
